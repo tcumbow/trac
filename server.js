@@ -62,14 +62,20 @@ function saveDb(retries = 0) {
 
 function cleanDbOnStartup() {
     console.log('running cleanDbOnStartup');
+    // for each event, if the subject property is not set, set it to "tom" or "olive" if the event has the tag "olive"
     db.events.forEach(event => {
-        // remove the 'modified' property from each event
-        delete event.modified;
+        if (!event.subject) {
+            if (event.tags.includes('olive')) {
+                event.subject = 'olive';
+            } else {
+                event.subject = 'tom';
+            }
+        }
     });
     saveDb();
     console.log('cleanDbOnStartup has finished');
 }
-// cleanDbOnStartup();
+cleanDbOnStartup();
 
 function getNextId(prefix) {
     if (!db.idCounter[prefix]) {
