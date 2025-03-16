@@ -99,6 +99,13 @@ app.post('/api/event', express.json(), (req, res) => {
     newEvent.id = getNextId('event');
     newEvent.tags = extrapolateTags(newEvent.tags);
     newEvent.created = new Date().toISOString();
+    // if the event has the tag "olive", set the subject to "olive", otherwise set it to "tom"
+    if (newEvent.tags.includes('olive')) {
+        newEvent.subject = 'olive';
+    }
+    if (!newEvent.subject) {
+        newEvent.subject = 'tom';
+    }
     db.events.unshift(newEvent);
     saveDb();
     res.json(newEvent);
@@ -127,6 +134,14 @@ app.put('/api/event/:id', express.json(), (req, res) => {
         return;
     }
     newEvent.created = oldEvent.created;
+    // if the event does not have a subject, set it to "tom" or "olive" if the event has the tag "olive"
+    if (!newEvent.subject) {
+        if (newEvent.tags.includes('olive')) {
+            newEvent.subject = 'olive';
+        } else {
+            newEvent.subject = 'tom';
+        }
+    }
     db.events[eventIndex] = newEvent;
     saveDb();
     res.json(newEvent);
