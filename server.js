@@ -120,12 +120,15 @@ app.post('/api/event', express.json(), (req, res) => {
         newEvent.vals = convertTagsArrayToObject(newEvent.tags);
     }
     newEvent.created = new Date().toISOString();
-    // if the event has the tag "olive", set the subject to "olive", otherwise set it to "tom"
-    if (newEvent.tags.includes('olive')) {
-        newEvent.subject = 'olive';
-    }
+    // if the event does not have a subject...
     if (!newEvent.subject) {
-        newEvent.subject = 'tom';
+        // if the event has the tag "olive", set the subject to "olive", otherwise set it to "tom"
+        if (newEvent.tags.includes('olive')) {
+            newEvent.subject = 'olive';
+        }
+        if (!newEvent.subject) {
+            newEvent.subject = 'tom';
+        }
     }
     db.events.unshift(newEvent);
     saveDb();
