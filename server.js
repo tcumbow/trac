@@ -72,6 +72,20 @@ function cleanDbOnStartup() {
             }
         }
     });
+    // for each event...
+    db.events.forEach(event => {
+        // if the event does not have a vals property, set it to an empty object
+        if (!event.vals) {
+            event.vals = {};
+        }
+        // for each tag in the event...
+        event.tags.forEach(tag => {
+            // if the tag does not exist as a key in the vals property, set it to 1
+            if (!event.vals[tag]) {
+                event.vals[tag] = 1;
+            }
+        });
+    });
     saveDb();
     console.log('cleanDbOnStartup has finished');
 }
@@ -92,12 +106,19 @@ app.post('/api/event', express.json(), (req, res) => {
         res.status(400).json({ error: 'Event should not have an id' });
         return;
     }
-    if (!newEvent.tags || !Array.isArray(newEvent.tags)) {
-        res.status(400).json({ error: 'Event must have a tags array' });
+    if ((!newEvent.tags || !Array.isArray(newEvent.tags)) && (!newEvent.vals || typeof newEvent.vals !== 'object')) {
+        res.status(400).json({ error: 'Event must have a tags array or vals object' });
         return;
     }
     newEvent.id = getNextId('event');
-    newEvent.tags = extrapolateTags(newEvent.tags);
+    if (newEvent.vals) {
+        newEvent.vals = extrapolateVals(newEvent.vals);
+        // if the event has a vals property, set the tags to be the keys of the vals object
+        newEvent.tags = Object.keys(newEvent.vals);
+    } else {
+        newEvent.tags = extrapolateTags(newEvent.tags);
+        newEvent.vals = convertTagsArrayToObject(newEvent.tags);
+    }
     newEvent.created = new Date().toISOString();
     // if the event has the tag "olive", set the subject to "olive", otherwise set it to "tom"
     if (newEvent.tags.includes('olive')) {
@@ -129,11 +150,21 @@ app.put('/api/event/:id', express.json(), (req, res) => {
         res.status(400).json({ error: 'Event created date cannot be changed' });
         return;
     }
-    if (!newEvent.tags || !Array.isArray(newEvent.tags)) {
-        res.status(400).json({ error: 'Event must have a tags array' });
+    if ((!newEvent.tags || !Array.isArray(newEvent.tags)) && (!newEvent.vals || typeof newEvent.vals !== 'object')) {
+        res.status(400).json({ error: 'Event must have a tags array or vals object' });
         return;
     }
     newEvent.created = oldEvent.created;
+    // ASSUMPTION: if the event has a vals property, then it contains the most recent/correct information, and the tags should be set to the keys of the vals object
+    if (newEvent.vals) {
+        newEvent.vals = extrapolateVals(newEvent.vals);
+        // if the event has a vals property, set the tags to be the keys of the vals object
+        newEvent.tags = Object.keys(newEvent.vals);
+    } else {
+        newEvent.tags = extrapolateTags(newEvent.tags);
+        newEvent.vals = convertTagsArrayToObject(newEvent.tags);
+    }
+
     // if the event does not have a subject, set it to "tom" or "olive" if the event has the tag "olive"
     if (!newEvent.subject) {
         if (newEvent.tags.includes('olive')) {
