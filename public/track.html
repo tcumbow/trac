@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!--
+A simple web app that tracks bowel movements, food intake, and other health metrics.
+Strictly for personal use.
+Primarily used on Safari on iPhone 13 mini.
+Top priority is quick and easy data entry.
+-->
+
+<head>
+    <link rel="manifest" href="/track.json">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+        html {
+            touch-action: manipulation;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: calc(100dvh - 16px);
+            width: calc(100dvw - 16px);
+            background-color: #121212;
+            color: #e0e0e0;
+        }
+
+        button {
+            font-weight: bold;
+            color: #e0e0e0;
+            background-color: #333333;
+            border: 1px solid #444444;
+            cursor: pointer;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .flex-row {
+            display: flex;
+            flex-direction: row;
+            flex: auto;
+        }
+
+        .flex-column {
+            display: flex;
+            flex-direction: column;
+            flex: auto;
+        }
+
+        .margin-bottom {
+            margin-bottom: 10px;
+        }
+
+        .margin-top {
+            margin-top: 10px;
+        }
+
+        .no-grow {
+            flex-grow: 0 !important;
+        }
+
+        .no-scroll {
+            overflow: hidden;
+        }
+
+        .scroll {
+            overflow: auto;
+        }
+
+        .top-button {
+            /* flex: 1; */
+            margin: 0 5px;
+            padding-left: 0px;
+            padding-right: 0px;
+            padding-top: 10px;
+            padding-bottom: 10px;
+            font-size: 1em;
+            border-radius: 0px;
+            flex: auto;
+        }
+
+        .top-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.25;
+        }
+
+        .tag {
+            margin: 5px;
+            padding: 5px 10px;
+            font-size: 1em;
+            border-radius: 20px;
+        }
+
+        .tag-suggestion-highpriority {
+            background-color: darkblue;
+        }
+
+        .tag-suggestion-required {
+            background-color: darkred;
+        }
+
+        .tag-added {
+            background-color: darkgreen;
+        }
+
+        .tags-added {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            min-height: 43px;
+            flex-shrink: 0;
+        }
+
+        .event-search-input {
+            flex: 1;
+            padding: 10px;
+            font-size: 1em;
+            border: 1px solid #444444;
+            border-right: 0px;
+            background-color: #333333;
+            color: #e0e0e0;
+        }
+
+        .event-add-tag-button {
+            padding: 10px;
+            font-size: 1em;
+            border-radius: 0px;
+        }
+
+        .event-tag-suggestions {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            overflow: auto;
+        }
+
+        .recent-event {
+            align-items: center;
+        }
+
+        .button-in-list {
+            margin-right: 5px;
+            padding: 5px;
+            font-size: 1em;
+            border-radius: 0px;
+        }
+    </style>
+</head>
+
+<body>
+    <script> // Data layer
+
+        async function postEvent(event) {
+            const response = await fetch('/api/event', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(event)
+            });
+            // check for non 200 status codes and display an alert
+            if (!response.ok) {
+                alert('Failed to save event');
+                throw new Error('Failed to save event');
+                return;
+            }
+            return await response.json();
+        }
+
+        async function putEvent(id, event) {
+            const response = await fetch(`/api/event/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(event)
+            });
+            return await response.json();
+        }
+
+        async function deleteEvent(id) {
+            const response = await fetch(`/api/event/${id}`, {
+                method: 'DELETE'
+            });
+            return await response.json();
+        }
+
+        async function getEvents(recentCount) { // returns an array of events
+            const response = await fetch(`/api/events?recent_count=${recentCount}`);
+            return await response.json();
+        }
+
+        // Note: The server adds three properties to each event:
+        // - id: a unique identifier string
+        // - created: basically new Date().toISOString()
+        // - updated: basically new Date().toISOString() (but updated when the event is updated)
+
+        async function getTagAutocomplete(query) { // returns an array of tags
+            const response = await fetch(`/api/tagautocomplete?q=${query}`);
+            return await response.json();
+        }
+
+        async function getTagSuggestions(tagsAlreadyChosen) { // returns an object with two arrays: best and other
+            const response = await fetch('/api/gettagsuggestions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(tagsAlreadyChosen)
+            });
+            return await response.json();
+        }
+
+    </script>
+
+    <script> // Misc
+        const DEFAULT_TAG_SUGGESTIONS = ['poop', 'food', 'drink'];
+        const emojiMap = {
+            poop: "💩",
+            food: "🍔",
+            drink: "🥤",
+            grape: "🍇",
+            apple: "🍎",
+            banana: "🍌",
+            orange: "🍊",
+            milk: "🥛",
+            water: "💧",
+            juice: "🧃",
+            coffee: "☕",
+            caffeine: "☕",
+            tea: "🍵",
+            chinese: "🍜",
+            mexican: "🌮",
+            indian: "🍛",
+            cheese: "🧀",
+            bread: "🍞",
+            rice: "🍚",
+            noodle: "🍜",
+            bean: "🥫",
+            beans: "🥫",
+            beef: "🥩",
+            chicken: "🍗",
+            pork: "🍖",
+            fish: "🐟",
+            "ice cream": "🍦",
+            cake: "🍰",
+            cookie: "🍪",
+            candy: "🍬",
+            chocolate: "🍫",
+            popcorn: "🍿",
+            pizza: "🍕",
+            burger: "🍔",
+            fries: "🍟",
+            salad: "🥗",
+            sweetener: "🍯",
+            sugar: "🍬",
+            purple: "🟣",
+            blue: "🔵",
+            green: "🟢",
+            yellow: "🟡",
+            red: "🔴",
+            pills: "💊",
+            imodium: "💊",
+            exercise: "🏋️",
+            outdoors: "🌳",
+            stress: "😫",
+            beer: "🍺",
+            wine: "🍷",
+            liquor: "🥃",
+            sandwich: "🥪",
+            olive: "🐈",
+            dairy: "🥛",
+            gluten: "🌾",
+            soy: "🌱",
+            nut: "🥜",
+            egg: "🥚",
+            shellfish: "🦐",
+            sausage: "🌭",
+            bacon: "🥓",
+            hotdog: "🌭"
+        };
+
+        function decorateText(text) {
+            if (emojiMap[text]) {
+                return emojiMap[text] + text;
+            }
+            if (text.startsWith("washlet")) {
+                return "💦" + text;
+            }
+            if (text.includes("meat")) {
+                return "🥩" + text;
+            }
+            return text;
+        }
+
+        function getFriendlyDate(dateObj) {
+            // returns a more easily readable date+time string
+            // for example, if the dateObj is from today, it will return the time only
+            // if the dateObj is from yesterday, it will return "Yesterday, " + time
+            // if the dateObj is from less than a week ago, it will return the day of the week + time
+            // if the dateObj is from more than a week ago, it will return the date + time
+            // if the time is less than an hour ago, it will return "X minutes ago"
+            // if the time is less than a minute ago, it will return "Just now"
+            // seconds are never displayed
+
+            const now = new Date();
+            const interval = now - dateObj;
+            const seconds = Math.floor(interval / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+
+            if (seconds < 60) {
+                return "Just now";
+            } else if (minutes < 60) {
+                return `${minutes} minutes ago`;
+            } else if (hours < 24) {
+                return `${hours} hours ago`;
+            } else if (days === 0) {
+                return dateObj.toLocaleTimeString();
+            } else if (days === 1) {
+                return "Yesterday, " + dateObj.toLocaleTimeString();
+            } else if (days < 7) {
+                return dateObj.toLocaleDateString(undefined, { weekday: 'long' }) + ", " + dateObj.toLocaleTimeString();
+            } else {
+                return dateObj.toLocaleString();
+            }
+        }
+
+    </script>
+
+    <div id="event" class="flex-column no-scroll">
+        <div id="top-buttons" class="flex-row no-grow margin-bottom">
+            <button id="event-goto-recent" class="top-button" onclick="
+                // Hide the event entry div
+                document.getElementById('event').classList.add('hidden');
+                // Show the recent div
+                document.getElementById('recent').classList.remove('hidden');
+                // Initialize the recent div
+                recent_initialize();
+                ">🗓️ History</button>
+            <button id="event-save" class="top-button" onclick="
+                // Save the event
+                eventEntry_save();
+                ">💾 Save</button>
+            <script>
+                async function eventEntry_save() {
+                    if (eventEntry_mode === 'new') {
+                        const eventToSubmit = { tags: eventEntry_tagsAdded };
+                        const eventCreated = await postEvent(eventToSubmit);
+                        eventEntry_edit(eventCreated);
+                    } else if (eventEntry_mode === 'edit') {
+                        eventEntry_eventToEdit.tags = eventEntry_tagsAdded;
+                        await putEvent(eventEntry_eventToEdit.id, eventEntry_eventToEdit);
+                        eventEntry_tagsCurrentlySavedToServerTracker.set(eventEntry_tagsAdded);
+                        eventEntry_updateButtons();
+                    } else {
+                        alert('Invalid eventEntry_mode');
+                    }
+                }
+            </script>
+            <button id="event-edit-cancel" class="top-button" onclick="
+                // Discard changes and return to new mode
+                eventEntry_initialize_new();
+                ">❌ Discard</button>
+            <button id="event-submit" class="top-button" onclick="eventEntry_submit()">💾❌ Save+Close</button>
+            <script>
+                async function eventEntry_submit() {
+                    if (eventEntry_mode === 'new') {
+                        const eventToSubmit = { tags: eventEntry_tagsAdded };
+                        await postEvent(eventToSubmit);
+                        eventEntry_initialize_new();
+                    } else if (eventEntry_mode === 'edit') {
+                        eventEntry_eventToEdit.tags = eventEntry_tagsAdded;
+                        await putEvent(eventEntry_eventToEdit.id, eventEntry_eventToEdit);
+                        eventEntry_initialize_new();
+                    } else {
+                        alert('Invalid eventEntry_mode');
+                    }
+                }
+            </script>
+        </div>
+        <div id="event-tags-added" class="tags-added">
+            <!-- Tags added to the event will be displayed here as buttons (click to remove) -->
+        </div>
+        <script> // eventEntry_tagsAdded functions
+            async function eventEntry_tagsAdded_clear() {
+                eventEntry_tagsAdded = [];
+                const eventTagsAdded = document.getElementById("event-tags-added");
+                while (eventTagsAdded.firstChild) {
+                    eventTagsAdded.removeChild(eventTagsAdded.firstChild);
+                }
+            }
+
+            async function eventEntry_tagsAdded_add(tag) {
+                if (eventEntry_tagsAdded.includes(tag)) {
+                    return;
+                }
+                // clear the search box
+                eventEntry_search_clear();
+                eventEntry_tagsAdded.push(tag);
+                const eventTagsAdded = document.getElementById("event-tags-added");
+                const tagButton = document.createElement("button");
+                tagButton.classList.add("tag");
+                tagButton.classList.add("tag-added");
+                tagButton.undecoratedTag = tag;
+                tagButton.textContent = decorateText(tag);
+                tagButton.onclick = async () => {
+                    eventEntry_tagsAdded_remove(tag);
+                };
+                eventTagsAdded.appendChild(tagButton);
+                eventEntry_updateButtons();
+                eventEntry_suggestionsDiv_calculateAndPopulateSuggestions();
+            }
+
+            async function eventEntry_tagsAdded_remove(tag) {
+                eventEntry_tagsAdded = eventEntry_tagsAdded.filter(t => t !== tag);
+                const eventTagsAdded = document.getElementById("event-tags-added");
+                for (const child of eventTagsAdded.children) {
+                    if (child.undecoratedTag === tag) {
+                        eventTagsAdded.removeChild(child);
+                        break;
+                    }
+                }
+                eventEntry_updateButtons();
+                eventEntry_suggestionsDiv_calculateAndPopulateSuggestions();
+            }
+
+        </script>
+        <div id="event-search-or-create" class="flex-row no-grow margin-bottom margin-top">
+            <input id="event-search" type="text" placeholder="Search or create tag" oninput="eventEntry_search_oninput()" onkeypress="if(event.key === 'Enter') eventEntry_search_addManuallyEnteredTag()" class="event-search-input" />
+            <button id="event-add-tag" class="event-add-tag-button" onclick="eventEntry_search_addManuallyEnteredTag()">+</button>
+            <script> // eventEntry_search functions
+                async function eventEntry_search_clear() {
+                    document.getElementById('event-search').value = '';
+                }
+                async function eventEntry_search_oninput() {
+                    const partialTag = document.getElementById('event-search').value.toLowerCase();
+                    if (partialTag === '') {
+                        eventEntry_suggestionsDiv_calculateAndPopulateSuggestions();
+                    } else {
+                        eventEntry_suggestionsDiv_populate(await getTagAutocomplete(partialTag));
+                    }
+                    document.getElementById('event-edit-cancel').disabled = eventEntry_mode === 'new' && eventEntry_tagsAdded.length === 0 && document.getElementById('event-search').value === '';
+                }
+                async function eventEntry_search_addManuallyEnteredTag() {
+                    const tag = document.getElementById('event-search').value.trim().toLowerCase();
+                    eventEntry_tagsAdded_add(tag);
+                    eventEntry_suggestionsDiv_calculateAndPopulateSuggestions();
+                }
+            </script>
+        </div>
+        <div id="event-tag-suggestions" class="event-tag-suggestions">
+            <!-- Tag suggestions/autocomplete will be added here as buttons -->
+        </div>
+        <script> // eventEntry_suggestionsDiv functions
+            async function eventEntry_suggestionsDiv_clear() {
+                const eventTagSuggestions = document.getElementById("event-tag-suggestions");
+                while (eventTagSuggestions.firstChild) {
+                    eventTagSuggestions.removeChild(eventTagSuggestions.firstChild);
+                }
+            }
+            async function eventEntry_suggestionsDiv_populate(suggestions, highPrioritySuggestions, requiredSuggestions) {
+                eventEntry_suggestionsDiv_clear();
+                const eventTagSuggestions = document.getElementById("event-tag-suggestions");
+                if (requiredSuggestions) {
+                    for (const suggestion of requiredSuggestions) {
+                        const button = document.createElement("button");
+                        eventTagSuggestions.appendChild(button);
+                        button.classList.add("tag");
+                        button.classList.add("tag-suggestion");
+                        button.classList.add("tag-suggestion-required");
+                        button.undecoratedTag = suggestion;
+                        button.textContent = decorateText(suggestion);
+                        button.onclick = async () => {
+                            eventEntry_tagsAdded_add(suggestion);
+                        };
+                    }
+                }
+                if (highPrioritySuggestions) {
+                    for (const suggestion of highPrioritySuggestions) {
+                        const button = document.createElement("button");
+                        eventTagSuggestions.appendChild(button);
+                        button.classList.add("tag");
+                        button.classList.add("tag-suggestion");
+                        button.classList.add("tag-suggestion-highpriority");
+                        button.undecoratedTag = suggestion;
+                        button.textContent = decorateText(suggestion);
+                        button.onclick = async () => {
+                            eventEntry_tagsAdded_add(suggestion);
+                        };
+                    }
+                }
+                for (const suggestion of suggestions) {
+                    const button = document.createElement("button");
+                    eventTagSuggestions.appendChild(button);
+                    button.classList.add("tag");
+                    button.classList.add("tag-suggestion");
+                    button.undecoratedTag = suggestion;
+                    button.textContent = decorateText(suggestion);
+                    button.onclick = async () => {
+                        eventEntry_tagsAdded_add(suggestion);
+                    };
+                }
+            }
+            async function eventEntry_suggestionsDiv_calculateAndPopulateSuggestions() {
+                const arrayOfTagsAlreadySelected = eventEntry_tagsAdded;
+                const suggestionsFromApiV2 = await getTagSuggestions(arrayOfTagsAlreadySelected);
+                eventEntry_suggestionsDiv_populate(suggestionsFromApiV2.other, suggestionsFromApiV2.best, suggestionsFromApiV2.required);
+            }
+        </script>
+    </div>
+    <script> // Event entry initialization
+        async function eventEntry_updateButtons() {
+            const thereIsSomethingToSave = eventEntry_tagsCurrentlySavedToServerTracker.isDifferent();
+            document.getElementById('event-save').disabled = !thereIsSomethingToSave;
+            document.getElementById('event-submit').disabled = !thereIsSomethingToSave;
+            document.getElementById('event-edit-cancel').disabled = eventEntry_mode === 'new' && eventEntry_tagsAdded.length === 0 && document.getElementById('event-search').value === '';
+        }
+
+        let eventEntry_tagsAdded;
+        const eventEntry_tagsCurrentlySavedToServerTracker = {
+            _tags: [],
+            clear: function () {
+                this._tags = [];
+            },
+            set: function (tags) {
+                this._tags = [...tags];
+            },
+            isDifferent: function () {
+                if (this._tags.length !== eventEntry_tagsAdded.length) {
+                    return true;
+                }
+                for (let i = 0; i < this._tags.length; i++) {
+                    if (this._tags[i] !== eventEntry_tagsAdded[i]) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        };
+        let eventEntry_mode;
+        let eventEntry_eventToEdit;
+        async function eventEntry_initialize_new() {
+            eventEntry_mode = 'new';
+            eventEntry_eventToEdit = null;
+            // Clear the event tags added div and array
+            eventEntry_tagsAdded_clear();
+            // Clear eventEntry_tagsCurrentlySavedToServer
+            eventEntry_tagsCurrentlySavedToServerTracker.clear();
+            // Clear the search box
+            document.getElementById("event-search").value = "";
+            // Update the save button visibility
+            eventEntry_updateButtons();
+            // Populate the tag suggestions
+            eventEntry_suggestionsDiv_calculateAndPopulateSuggestions();
+        }
+        eventEntry_initialize_new();
+        async function eventEntry_edit(event) {
+            eventEntry_mode = 'edit';
+            eventEntry_eventToEdit = event;
+            // Clear the event tags added div and array
+            eventEntry_tagsAdded_clear();
+            // Populate the event tags added div and array
+            for (const tag of event.tags) {
+                eventEntry_tagsAdded_add(tag);
+            }
+            // Set eventEntry_tagsCurrentlySavedToServerTracker
+            eventEntry_tagsCurrentlySavedToServerTracker.set(event.tags);
+            // Update the save button visibility
+            eventEntry_updateButtons();
+            // Clear the search box
+            document.getElementById("event-search").value = "";
+            // Populate the tag suggestions
+            eventEntry_suggestionsDiv_calculateAndPopulateSuggestions();
+        }
+    </script>
+
+    <div id="recent" class="flex-column hidden no-scroll">
+        <div id="recent-top-buttons" class="flex-row no-grow margin-bottom">
+            <button id="recent-goto-event" class="top-button" onclick="
+                // Hide the recent div
+                document.getElementById('recent').classList.add('hidden');
+                // Show the event entry div
+                document.getElementById('event').classList.remove('hidden');
+                // Initialize the event entry div
+                eventEntry_initialize_new();
+                ">📝</button>
+            <button id="recent-refresh" class="top-button" onclick="
+                // Refresh the recent div
+                recent_initialize();
+                ">🔄</button>
+        </div>
+        <div id="recent-events" class="flex-column no-grow scroll">
+            <!-- Recent events will be displayed here -->
+        </div>
+    </div>
+    <script>
+        async function recent_initialize() {
+            const recentEvents = await getEvents(200);
+            const recentEventsDiv = document.getElementById("recent-events");
+            while (recentEventsDiv.firstChild) {
+                recentEventsDiv.removeChild(recentEventsDiv.firstChild);
+            }
+            for (const event of recentEvents) {
+                const eventDiv = document.createElement("div");
+                eventDiv.classList.add("flex-row");
+                eventDiv.classList.add("margin-bottom");
+                eventDiv.classList.add("recent-event");
+                const editButton = document.createElement("button");
+                editButton.classList.add("button-in-list");
+                editButton.textContent = "✏️";
+                editButton.onclick = async () => {
+                    // Hide the recent div
+                    document.getElementById('recent').classList.add('hidden');
+                    // Show the event entry div
+                    document.getElementById('event').classList.remove('hidden');
+                    // Initialize the event entry div for editing
+                    eventEntry_edit(event);
+                };
+                eventDiv.appendChild(editButton);
+                const deleteButton = document.createElement("button");
+                deleteButton.classList.add("button-in-list");
+                deleteButton.textContent = "🗑️";
+                deleteButton.onclick = async () => {
+                    const response = confirm('Are you sure you want to delete this event?');
+                    if (response === true) {
+                        const result = await deleteEvent(event.id);
+                        if (result.success) {
+                            recent_initialize();
+                            // alert('Event deleted');
+                        } else {
+                            alert('Failed to delete event');
+                        }
+                    }
+                };
+                eventDiv.appendChild(deleteButton);
+                const eventDate = document.createElement("div");
+                eventDate.textContent = getFriendlyDate(new Date(event.created));
+                eventDiv.appendChild(eventDate);
+                for (const tag of event.tags) {
+                    const tagButton = document.createElement("button");
+                    tagButton.classList.add("tag");
+                    tagButton.textContent = decorateText(tag);
+                    tagButton.style.cursor = "default";
+                    eventDiv.appendChild(tagButton);
+                }
+                recentEventsDiv.appendChild(eventDiv);
+            }
+        }
+    </script>
+</body>
+
+</html>

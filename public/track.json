@@ -1,0 +1,14 @@
+{
+    "name": "Track",
+    "short_name": "Track",
+    "description": "It's a tracker for all kinds of things!",
+    "start_url": "/track.html",
+    "display": "standalone",
+    "icons": [
+        {
+            "src": "favicon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml"
+        }
+    ]
+}

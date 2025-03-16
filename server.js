@@ -496,5 +496,5 @@ app.get('/api/reporting/events_non_olive', (req, res) => {
 app.use(express.static('public'));
 
 server.listen(3031, () => {
-    console.log('Server started on http://localhost:3031/pooptrac.html');
+    console.log('Server started on http://localhost:3031/track.html');
 });
